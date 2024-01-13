@@ -1,0 +1,18 @@
+{% load widget_tweaks %}
+
+<div class="my-2 bg-white dark:bg-gray-900 p-4 rounded-3xl shadow">
+    <form 
+        method="POST" 
+        action="{% url 'upload_file' %}" 
+        enctype="multipart/form-data">
+        {% csrf_token %}
+        <label class="block mb-2 text-sm font-medium text-gray-900 dark:text-white mx-1" for="file_input">Upload file:</label>
+        <div class="flex items-center gap-1">
+            {% render_field form.excel_file class="block w-full px-2 py-2 text-sm text-gray-900 dark:bg-gray-900 dark:text-white dark:border-gray-700 border border-gray-300 rounded-lg cursor-pointer bg-gray-50  focus:outline-none " %}
+            <button type="submit" class="bg-white border border-gray-300 dark:border-gray-700 dark:bg-gray-900 focus:border focus:border-gray-400 text-white px-4 py-2 rounded-md">🚀</button>
+        </div>
+        <p class="mt-1 text-sm text-gray-500 dark:text-white mx-1" id="file_input_help">Formats Allowed: .Xls, .Xlsx</p>
+    </form>
+</div>
+
+<script src="//unpkg.com/alpinejs" defer></script>

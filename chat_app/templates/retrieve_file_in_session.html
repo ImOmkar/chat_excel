@@ -1,0 +1,31 @@
+<div id="command">
+    {% if final_data %}
+    <table>
+        <thead>
+            <tr>
+                {% for column_name, _ in final_data.0.items %}
+                    <th>{{ column_name }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in final_data %}
+                <tr>
+                    {% for _, value in row.items %}
+                        <td>{{ value }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+
+
+    <form method="post" hx-post="{% url 'retrieve_file_in_session' %}" hx-target="#command">
+        {% csrf_token %}
+        <input name="command" placeholder="enter command on excel">
+        <button type="submit">Post Command</button>
+    </form>
+
+</div>

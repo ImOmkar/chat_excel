@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+{% load widget_tweaks %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 Chat with Excel 🤖</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="dark:bg-gray-950">
+    <div class="p-4 mb-4 text-sm text-center text-white rounded-b-3xl drop-shadow-lg dark:bg-gray-900" role="alert">
+        <span class="font-bold font-mono text-2xl">🤖 Chat with Excel 🤖
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div
+                x-cloak
+                x-show="showAlert"
+                x-data="{ showAlert: true }"
+                x-init="setTimeout(() => showAlert = false, 3000)"
+                role="alert" 
+                class="fixed bg-gray-800 text-white bottom-0 my-4 mx-auto flex justify-center items-center w-auto overflow-hidden rounded-lg shadow-md">
+                <div class="flex items-center justify-center w-12 p-2 bg-[#6364ff]">
+                    <svg class="w-6 h-6 text-white fill-current" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20 3.36667C10.8167 3.36667 3.3667 10.8167 3.3667 20C3.3667 29.1833 10.8167 36.6333 20 36.6333C29.1834 36.6333 36.6334 29.1833 36.6334 20C36.6334 10.8167 29.1834 3.36667 20 3.36667ZM19.1334 33.3333V22.9H13.3334L21.6667 6.66667V17.1H27.25L19.1334 33.3333Z" />
+                    </svg>
+                </div>
+            
+                <div class="px-4 py-2 -mx-3"> 
+                    <div class="mx-3">
+                    <p class="text-sm text-gray-200">
+                        {{ message }}
+                    </p>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="container mx-auto my-2 max-w-xl">
+        <div class="mx-1.5 space-y-2">
+            {% include "upload_form.html" %}
+            {% if files %}
+                <div class="bg-white dark:bg-gray-900 p-4 rounded-3xl shadow">
+                    <form id="chatForm">
+                        {% csrf_token %}
+                        <div id="files" hx-get="{% url "files" %}" hx-trigger="load"></div>
+                        {% include "chat_box.html" %}
+                        <div class="flex gap-1">
+                            <input type="text" id="messageInput" name="command" class="w-full p-2 border focus:border dark:bg-gray-900 dark:border-gray-700 dark:text-white focus:border-gray-400 rounded-md focus:outline-none" placeholder="Type a command..." required>
+                            <button type="submit" class="bg-white border border-gray-300 dark:bg-gray-900 dark:border-gray-700 focus:border focus:border-gray-400 text-white px-4 py-2 rounded-md">🚀</button>
+                        </div>
+                    </form>
+                </div>
+            {% endif %}
+            <div class="bg-white dark:bg-gray-900 p-4 space-y-2 rounded-3xl shadow">
+                <div>
+                    <p class="text-white text-lg font-mono">- Start</p>
+                    <p class="dark:text-gray-300">The chat box will be shown after uploading the file.</p>
+                </div>
+                <hr class="border-gray-700 border-dashed">
+                <div>
+                    <p class="text-white text-lg font-mono">- Working commands</p>
+                    <p class="dark:text-gray-300">1. summarize sales data for q1.</p>
+                    <p class="dark:text-gray-300">2. create pie chart country wise sales.</p>
+                    <p class="dark:text-gray-300">3. filter out profits below $500.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.getElementById('chatForm').addEventListener('submit', function (event) {
+        event.preventDefault();
+
+        // Get the form data
+        var formData = new FormData(this);
+        var messageInput = formData.get('command'); // Extract the entered text
+
+        // Update the chat with the user's message
+        var chatDiv = document.getElementById('chat');
+        chatDiv.innerHTML += '<div class="mb-2 text-right"><span class="bg-blue-500 text-white p-2 rounded-lg inline-block">' + messageInput + '</span></div>';
+        // Scroll to the bottom of the chat
+        chatDiv.scrollTop = chatDiv.scrollHeight;
+
+        // Make an AJAX request
+        fetch("{% url 'retrieve_file_in_session' %}", {
+            method: "POST",
+            body: formData,
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Handle the response data
+            console.log(data)
+            if (data.final_data_list) {
+                // Assuming data.final_data_list is an array of objects
+                const url = JSON.stringify(data.final_data_list)
+                console.log(url)
+                // Update the chatDiv with the new data
+                chatDiv.innerHTML += `<div class="mb-2 text-left bg-blue-500 text-white p-2 rounded-2xl inline-block"><p class="bg-blue-500 text-white p-2 rounded-lg inline-block">Here's the result. </p><a class="bg-blue-700 border-2 p-2 border-blue-700 focus:border-blue-500 rounded-2xl" href=${url}>Download</a></div>`;
+                // Scroll to the bottom of the chat
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+            }
+            else if (data.error) {
+                const error = JSON.stringify(data.error)
+                console.log(error)
+                // Update the chatDiv with the new data
+                chatDiv.innerHTML += `<div class="mb-2 text-left bg-blue-500 text-white p-2 rounded-2xl inline-block"><p class="bg-blue-500 text-white p-2 rounded-lg inline-block">${error}</div>`;
+                // Scroll to the bottom of the chat
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+        
+        // Clear the input field after submitting the form
+        this.reset();
+    });
+    </script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="//unpkg.com/alpinejs" defer></script>
+</body>
+</html>

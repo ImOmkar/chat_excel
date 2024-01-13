@@ -1,0 +1,21 @@
+{% if files %}
+    <div class="flex gap-1 my-1.5 overflow-auto">
+        {% for file in files %}
+            <!-- checkbox for the file-->
+            <div class="flex justify-start items-center gap-2 p-3 rounded-md border dark:border dark:border-gray-700">
+                <input type="checkbox" name="files" value="{{ file.id }}"> 
+                <label class="dark:text-white">{{ file.file_name }}</label>
+                <!-- Delete button -->
+                <button class="border-l border-gray-700 mx-1 px-2" hx-delete="{% url 'delete_uploaded_file' file.id %}" hx-target="#files">🗑️</button>
+            </div>
+            <!-- checkbox for the file-->
+        {% endfor %}
+    </div>
+{% endif %}
+
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<script>
+    document.body.addEventListener("htmx:configRequest", (event) => {
+      event.detail.headers["X-CSRFToken"] = "{{ csrf_token }}";
+    });
+</script>
