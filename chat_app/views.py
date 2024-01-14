@@ -7,7 +7,7 @@ import pandas as pd
 import os
 from .models import InputCommand
 import uuid
-
+import re
 import matplotlib
 matplotlib.use('Agg')  
 """
@@ -49,6 +49,7 @@ def files(request):
     context = {'files': files}
     return render(request, 'files.html', context)
 
+
 def retrieve_file_in_session(request):
     if request.method == 'POST':
         file_id = request.POST.get('files')
@@ -57,64 +58,197 @@ def retrieve_file_in_session(request):
         if data and file_id and data.strip():
             request.session['file_id'] = file_id
             selected_file = UploadExcel.objects.get(id=file_id)
+            
             processed_data = process_excel(selected_file.excel_file.path, data)
             print(processed_data)
 
             input_command = InputCommand.objects.create(file=selected_file, command=data, response_url=processed_data)
             input_command.save()
 
-            return JsonResponse({'final_data_list': processed_data})
+            # return JsonResponse({'final_data_list': processed_data})
+            if '/' in processed_data:
+                return JsonResponse({'final_data_list': processed_data})
+            else:
+                return JsonResponse({'error': processed_data})
         else:
             return JsonResponse({'error': 'Select file and enter command'})
     else:
         return JsonResponse({'error': 'method not allowed'})
 
+
+def check_column(df, commands):
+    matching_commands = []
+    for command in commands:
+        if command in df.columns.str.capitalize().tolist():
+            matching_commands.append(command)
+    return matching_commands
+
+def extract_column_info(command):
+    grouping_pattern = re.compile(r'group\s*by\s*([^\s,]+)')
+    summing_pattern = re.compile(r'sum\s*of\s*([^\s,]+)')
+    pie_pattern = re.compile(r'pie')
+
+    grouping_match = grouping_pattern.search(command)
+    summing_match = summing_pattern.search(command)
+    pie_match = pie_pattern.search(command)
+
+    grouping_column = None
+    if grouping_match:
+        grouping_column = grouping_match.group(1)
+
+    summing_column = None
+    if summing_match:
+        summing_column = summing_match.group(1)
+
+    include_pie = False
+    if pie_match:
+        include_pie = True
+
+    return grouping_column, summing_column, include_pie
+
+
 def process_excel(file_path, command):
+    grouping_column, summing_column, include_pie = extract_column_info(command)
     try:
         df = pd.read_excel(file_path)
 
-        command_parts = command.lower().split()
+        command_parts = command.split()
         print(command_parts)
+        matching_columns = check_column(df, command_parts)
 
-        if "summarize" in command_parts and "sales" in command_parts and "data" in command_parts and "for" in command_parts and "q1" in command_parts:
+        if 'head' in command:
+            data = df.head()
 
-            q1_data = df[(df["Month Name"] == "January") | (df["Month Name"] == "February") | (df["Month Name"] == "March")]
-            q1_data_grouped = q1_data.groupby(["Product", "Country"])
-            q1_sales_summary = q1_data_grouped["Sales"].sum()
-            q1_sales_summary = q1_sales_summary.sort_values(ascending=False)
-
-            excel_filename = f"q1_sales_summary_{uuid.uuid4()}.xlsx"
+            excel_filename = f"{command}_{uuid.uuid4()}.xlsx"
             excel_file_path = os.path.join("media/processed_files/", excel_filename)
-            q1_sales_summary.to_excel(excel_file_path, index=True)
+            data.to_excel(excel_file_path, index=True)
+
+            return excel_file_path
+        
+        elif 'tail' in command:
+            data = df.tail()
+
+            excel_filename = f"{command}_{uuid.uuid4()}.xlsx"
+            excel_file_path = os.path.join("media/processed_files/", excel_filename)
+            data.to_excel(excel_file_path, index=True)
+
+            return excel_file_path
+        
+        elif 'count' in command:
+            data = df.count()
+
+            excel_filename = f"{command}_{uuid.uuid4()}.xlsx"
+            excel_file_path = os.path.join("media/processed_files/", excel_filename)
+            data.to_excel(excel_file_path, index=True)
+
+            return excel_file_path
+        
+        elif 'unique' in command:
+            match = re.search(r'\bunique\s*([^\s,]+)\b', command)
+            if match:
+                column_name = match.group(1)
+                if column_name in df.columns:
+                    unique_values = df[column_name].unique()
+                    unique_df = pd.DataFrame(unique_values, columns=[column_name])
+                    excel_filename = f"{command}_{uuid.uuid4()}.xlsx"
+                    excel_file_path = os.path.join("media/processed_files/", excel_filename)
+                    unique_df.to_excel(excel_file_path, index=True)
+
+                    return excel_file_path
+                else:
+                    return f"Column '{column_name}' not found."
+            else:
+                return "No match found."
+
+        elif 'summarize' in command_parts:
+            matching_columns = check_column(df, command_parts)
+            print(matching_columns)
+            summary = df[matching_columns].describe() if len(matching_columns) > 0 else df.describe()
+            print(summary)
+
+            excel_filename = f"summarize_{uuid.uuid4()}.xlsx"
+            excel_file_path = os.path.join("media/processed_files/", excel_filename)
+            summary.to_excel(excel_file_path, index=True)
 
             return excel_file_path
 
-        if "create" in command_parts and "pie" in command_parts and "chart" in command_parts and "country" in command_parts and "wise" in command_parts and "sales" in command_parts:
-            country_sales_data = df.groupby('Country')['Sales'].sum()
+        elif 'average' in command_parts and len(matching_columns) > 0:
+            averages_dict = {}
+            for column in matching_columns:
+                if column in df.columns:
+                    column_average = df[column].replace('[\$,]', '', regex=True).astype(float).mean()
+                    print(f"Average {column}: ${column_average:.2f}")
+                    averages_dict[column] = column_average
+                else:
+                    print(f"Column '{column}' not found.")
 
-            plt.figure(figsize=(8, 8))
-            plt.pie(country_sales_data, labels=country_sales_data.index, autopct='%1.1f%%', startangle=90)
-            plt.title("Country-wise Sales Pie Chart")
-            
-            image_filename = f"country_wise_sales_pie_chart_{uuid.uuid4()}.png"
-            image_file_path = os.path.join("media/processed_files/", image_filename)
-            plt.savefig(image_file_path)
-            plt.close()
-
-            return image_file_path
-
-        elif "filter" in command_parts and "out" in command_parts and "profits" in command_parts and "below" in command_parts and "$500" in command_parts:
-            profit_threshold = 500
-            filtered_data = df[df['Profit'] <= profit_threshold]
-
-            excel_filename = f"entries_below_$500_{uuid.uuid4()}.xlsx"
+            excel_filename = f"average_{uuid.uuid4()}.xlsx"
             excel_file_path = os.path.join("media/processed_files/", excel_filename)
-            filtered_data.to_excel(excel_file_path, index=False)
-
+            averages_df = pd.DataFrame.from_dict(averages_dict, orient='index', columns=['Average'])
+            averages_df.to_excel(excel_file_path, index_label='Column')
             return excel_file_path
+        
+
+        elif 'filter' in command_parts:
+            matching_columns = check_column(df, command_parts)
+            print(matching_columns)
+
+            if len(matching_columns) == 1:
+                column_name = matching_columns[0]
+
+                if column_name in df.columns:
+                    filter_value = [int(value) for value in command_parts if value.isnumeric()]
+                    
+                    if filter_value:
+                        filter_value = filter_value[0]  
+
+                        if 'below' in command_parts:
+                            filtered_df = df[df[column_name] < filter_value]
+                            excel_filename = f"entries_below_{filter_value}_{uuid.uuid4()}.xlsx"
+                            excel_file_path = os.path.join("media/processed_files/", excel_filename)
+                            filtered_df.to_excel(excel_file_path, index=False)
+                            return excel_file_path
+
+                        elif 'above' in command_parts:
+                            filtered_df = df[df[column_name] > filter_value]
+                            excel_filename = f"entries_above_{filter_value}_{uuid.uuid4()}.xlsx"
+                            excel_file_path = os.path.join("media/processed_files/", excel_filename)
+                            filtered_df.to_excel(excel_file_path, index=False)
+                            return excel_file_path
+
+                        else:
+                            return 'Specify "below" or "above" in the command for filtering.'
+                    else:
+                        return 'Enter a numeric value to filter.'
+
+                else:
+                    return 'Column not found in the DataFrame.'
+            else:
+                return 'Please specify a single column for filtering.'
+
+        
+        elif grouping_column and summing_column:
+            if all(column in df.columns for column in [grouping_column, summing_column]):
+                group_data = df.groupby(grouping_column)[summing_column].sum()
+
+                if include_pie:
+                    plt.figure(figsize=(8, 8))
+                    plt.pie(group_data, labels=group_data.index, autopct='%1.1f%%', startangle=90)
+                    plt.title(f"{grouping_column.capitalize()} {summing_column.capitalize()} Pie Chart")
+
+                    image_filename = f"{grouping_column}_{summing_column}_pie_chart_{uuid.uuid4()}.png"
+                    image_file_path = os.path.join("media/processed_files/", image_filename)
+                    plt.savefig(image_file_path)
+                    plt.close()
+
+                    return image_file_path
+                else:
+                    return f"{grouping_column.capitalize()} {summing_column.capitalize()} Sum: {group_data}"
+            else:
+                return "One or more specified columns not found."
 
         else:
-            return f'Unsupported command: {command}'
+            return "Command not recognized."
 
     except Exception as e:
         return f'Error processing file: {e}'
